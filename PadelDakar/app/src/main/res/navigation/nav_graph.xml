@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<navigation xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/nav_graph"
+    app:startDestination="@id/courtsFragment">
+
+    <fragment
+        android:id="@+id/courtsFragment"
+        android:name="com.padeldarkar.courts.CourtsFragment"
+        android:label="Terrains" />
+
+    <fragment
+        android:id="@+id/playersFragment"
+        android:name="com.padeldarkar.players.PlayersFragment"
+        android:label="Joueurs" />
+
+    <fragment
+        android:id="@+id/profileFragment"
+        android:name="com.padeldarkar.players.ProfileFragment"
+        android:label="Mon profil" />
+
+</navigation>
