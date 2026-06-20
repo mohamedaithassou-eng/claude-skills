@@ -8,20 +8,22 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Toast
 import androidx.fragment.app.Fragment
+import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
 import com.padeldarkar.adapters.PlayerAdapter
+import com.padeldarkar.database.AppDatabase
 import com.padeldarkar.databinding.FragmentPlayersBinding
+import com.padeldarkar.models.MatchRequest
 import com.padeldarkar.models.Player
+import com.padeldarkar.utils.SessionManager
+import kotlinx.coroutines.launch
 
 class PlayersFragment : Fragment() {
 
     private var _binding: FragmentPlayersBinding? = null
     private val binding get() = _binding!!
-    private val db = FirebaseFirestore.getInstance()
-    private val auth = FirebaseAuth.getInstance()
     private lateinit var adapter: PlayerAdapter
+    private lateinit var session: SessionManager
     private var niveauFiltre = "Tous"
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
@@ -32,11 +34,12 @@ class PlayersFragment : Fragment() {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
+        session = SessionManager(requireContext())
+
         adapter = PlayerAdapter(emptyList()) { joueur -> demanderMatch(joueur) }
         binding.rvJoueurs.layoutManager = LinearLayoutManager(requireContext())
         binding.rvJoueurs.adapter = adapter
 
-        // Filtre par niveau
         val niveaux = listOf("Tous", "Débutant", "Intermédiaire", "Avancé")
         val spinnerAdapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_item, niveaux)
         spinnerAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
@@ -55,62 +58,48 @@ class PlayersFragment : Fragment() {
 
     private fun chargerJoueurs() {
         binding.progressBar.visibility = View.VISIBLE
-        val moi = auth.currentUser?.uid
+        val db = AppDatabase.getInstance(requireContext())
+        val monId = session.getUid()
 
-        var query = db.collection("joueurs")
-            .whereEqualTo("disponible", true)
-
-        db.collection("joueurs")
-            .whereEqualTo("disponible", true)
-            .get()
-            .addOnSuccessListener { documents ->
-                binding.progressBar.visibility = View.GONE
-                var joueurs = documents.toObjects(Player::class.java)
-                    .filter { it.uid != moi }  // Exclure soi-même
-
-                if (niveauFiltre != "Tous") {
-                    joueurs = joueurs.filter { it.niveau == niveauFiltre }
-                }
-
-                if (joueurs.isEmpty()) {
-                    binding.tvAucunJoueur.visibility = View.VISIBLE
-                    binding.rvJoueurs.visibility = View.GONE
-                } else {
-                    binding.tvAucunJoueur.visibility = View.GONE
-                    binding.rvJoueurs.visibility = View.VISIBLE
-                    adapter.updateList(joueurs)
-                }
+        lifecycleScope.launch {
+            val joueurs = if (niveauFiltre == "Tous") {
+                db.playerDao().joueursDipsonibles(monId)
+            } else {
+                db.playerDao().joueursParNiveau(niveauFiltre, monId)
             }
-            .addOnFailureListener {
-                binding.progressBar.visibility = View.GONE
-                Toast.makeText(requireContext(), "Erreur de chargement", Toast.LENGTH_SHORT).show()
+
+            binding.progressBar.visibility = View.GONE
+
+            if (joueurs.isEmpty()) {
+                binding.tvAucunJoueur.visibility = View.VISIBLE
+                binding.rvJoueurs.visibility = View.GONE
+            } else {
+                binding.tvAucunJoueur.visibility = View.GONE
+                binding.rvJoueurs.visibility = View.VISIBLE
+                adapter.updateList(joueurs)
             }
+        }
     }
 
     private fun demanderMatch(joueur: Player) {
-        val moi = auth.currentUser ?: return
+        val db = AppDatabase.getInstance(requireContext())
+        val monId = session.getUid()
+        val monNom = session.getNomComplet()
 
-        db.collection("joueurs").document(moi.uid).get()
-            .addOnSuccessListener { doc ->
-                val monProfil = doc.toObject(Player::class.java) ?: return@addOnSuccessListener
-                val demande = hashMapOf(
-                    "demandeurUid" to moi.uid,
-                    "demandeurNom" to "${monProfil.prenom} ${monProfil.nom}",
-                    "destinataireUid" to joueur.uid,
-                    "niveau" to joueur.niveau,
-                    "statut" to "en_attente",
-                    "timestamp" to System.currentTimeMillis()
-                )
+        lifecycleScope.launch {
+            val demande = MatchRequest(
+                demandeurId = monId,
+                demandeurNom = monNom,
+                destinataireId = joueur.uid,
+                niveau = joueur.niveau
+            )
+            db.matchRequestDao().inserer(demande)
 
-                db.collection("demandes_match").add(demande)
-                    .addOnSuccessListener {
-                        Toast.makeText(requireContext(),
-                            "Demande envoyée à ${joueur.prenom} ${joueur.nom} !", Toast.LENGTH_SHORT).show()
-                    }
-                    .addOnFailureListener {
-                        Toast.makeText(requireContext(), "Erreur lors de l'envoi", Toast.LENGTH_SHORT).show()
-                    }
+            activity?.runOnUiThread {
+                Toast.makeText(requireContext(),
+                    "Demande envoyée à ${joueur.prenom} ${joueur.nom} !", Toast.LENGTH_SHORT).show()
             }
+        }
     }
 
     override fun onDestroyView() {

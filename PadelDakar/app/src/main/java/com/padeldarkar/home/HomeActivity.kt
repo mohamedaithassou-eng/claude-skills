@@ -5,10 +5,10 @@ import android.os.Bundle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.navigation.fragment.NavHostFragment
 import androidx.navigation.ui.setupWithNavController
-import com.google.firebase.auth.FirebaseAuth
 import com.padeldarkar.R
 import com.padeldarkar.auth.LoginActivity
 import com.padeldarkar.databinding.ActivityHomeBinding
+import com.padeldarkar.utils.SessionManager
 
 class HomeActivity : AppCompatActivity() {
 
@@ -26,7 +26,7 @@ class HomeActivity : AppCompatActivity() {
         binding.bottomNavigation.setupWithNavController(navController)
 
         binding.btnDeconnexion.setOnClickListener {
-            FirebaseAuth.getInstance().signOut()
+            SessionManager(this).deconnecter()
             startActivity(Intent(this, LoginActivity::class.java))
             finish()
         }

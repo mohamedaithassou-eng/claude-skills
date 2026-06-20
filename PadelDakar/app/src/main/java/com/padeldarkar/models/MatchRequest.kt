@@ -1,14 +1,15 @@
 package com.padeldarkar.models
 
+import androidx.room.Entity
+import androidx.room.PrimaryKey
+
+@Entity(tableName = "demandes_match")
 data class MatchRequest(
-    val id: String = "",
-    val demandeurUid: String = "",
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val demandeurId: Int = 0,
     val demandeurNom: String = "",
-    val destinataireUid: String = "",
+    val destinataireId: Int = 0,
     val niveau: String = "",
-    val terrain: String = "",
-    val dateProposee: String = "",
-    val heureProposee: String = "",
-    val statut: String = "en_attente",  // en_attente, accepte, refuse
+    val statut: String = "en_attente",
     val timestamp: Long = System.currentTimeMillis()
 )

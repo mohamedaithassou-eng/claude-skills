@@ -4,25 +4,25 @@ import android.content.Intent
 import android.os.Bundle
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.google.firebase.auth.FirebaseAuth
-import com.google.firebase.firestore.FirebaseFirestore
+import androidx.lifecycle.lifecycleScope
+import com.padeldarkar.database.AppDatabase
 import com.padeldarkar.databinding.ActivityRegisterBinding
 import com.padeldarkar.home.HomeActivity
 import com.padeldarkar.models.Player
+import com.padeldarkar.utils.SessionManager
+import kotlinx.coroutines.launch
 
 class RegisterActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityRegisterBinding
-    private lateinit var auth: FirebaseAuth
-    private lateinit var db: FirebaseFirestore
+    private lateinit var session: SessionManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityRegisterBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        auth = FirebaseAuth.getInstance()
-        db = FirebaseFirestore.getInstance()
+        session = SessionManager(this)
 
         binding.btnInscription.setOnClickListener {
             val nom = binding.etNom.text.toString().trim()
@@ -40,44 +40,42 @@ class RegisterActivity : AppCompatActivity() {
             }
 
             if (nom.isEmpty() || prenom.isEmpty() || email.isEmpty() || motDePasse.isEmpty()) {
-                Toast.makeText(this, "Veuillez remplir tous les champs obligatoires", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Veuillez remplir les champs obligatoires (*)", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            if (motDePasse.length < 6) {
-                Toast.makeText(this, "Le mot de passe doit contenir au moins 6 caractères", Toast.LENGTH_SHORT).show()
+            if (motDePasse.length < 4) {
+                Toast.makeText(this, "Le mot de passe doit contenir au moins 4 caractères", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
             binding.btnInscription.isEnabled = false
 
-            auth.createUserWithEmailAndPassword(email, motDePasse)
-                .addOnSuccessListener { result ->
-                    val uid = result.user!!.uid
-                    val joueur = Player(
-                        uid = uid,
-                        nom = nom,
-                        prenom = prenom,
-                        email = email,
-                        telephone = telephone,
-                        quartier = quartier,
-                        niveau = niveau
-                    )
+            lifecycleScope.launch {
+                val db = AppDatabase.getInstance(applicationContext)
 
-                    db.collection("joueurs").document(uid).set(joueur)
-                        .addOnSuccessListener {
-                            startActivity(Intent(this, HomeActivity::class.java))
-                            finish()
-                        }
-                        .addOnFailureListener {
-                            binding.btnInscription.isEnabled = true
-                            Toast.makeText(this, "Erreur lors de la sauvegarde du profil", Toast.LENGTH_SHORT).show()
-                        }
+                val existant = db.playerDao().trouverParEmail(email)
+                if (existant != null) {
+                    runOnUiThread {
+                        binding.btnInscription.isEnabled = true
+                        Toast.makeText(this@RegisterActivity, "Cet email est déjà utilisé", Toast.LENGTH_SHORT).show()
+                    }
+                    return@launch
                 }
-                .addOnFailureListener {
-                    binding.btnInscription.isEnabled = true
-                    Toast.makeText(this, "Erreur : ${it.message}", Toast.LENGTH_SHORT).show()
+
+                val joueur = Player(
+                    nom = nom, prenom = prenom, email = email,
+                    telephone = telephone, quartier = quartier,
+                    motDePasse = motDePasse, niveau = niveau
+                )
+                val uid = db.playerDao().inserer(joueur).toInt()
+
+                runOnUiThread {
+                    session.connecter(uid, nom, prenom)
+                    startActivity(Intent(this@RegisterActivity, HomeActivity::class.java))
+                    finish()
                 }
+            }
         }
 
         binding.tvConnexion.setOnClickListener { finish() }
